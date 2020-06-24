@@ -50,13 +50,13 @@ def test_connect_err(mocker):
     assert conn is None
     assert err is not None
 
-def test_get_config_ok(mocker, conn):
+def test_get_config_ok(conn):
     conn.fetchall_return_value = TEST_CONFIG
     config, err = PostgreSQLAlt.get_config(conn)
     assert config == TEST_CONFIG
     assert err is None
 
-def test_get_config_err(mocker, conn):
+def test_get_config_err(conn):
     conn.fetchall_side_effect = DatabaseError('Something went wrong')
     config, err = PostgreSQLAlt.get_config(conn)
     assert config is None
@@ -65,3 +65,84 @@ def test_get_config_err(mocker, conn):
 def test_config_to_string():
     config_str = PostgreSQLAlt.config_to_string(TEST_CONFIG)
     assert config_str == TEST_CONFIG_STR
+
+def test_get_should_collect_logs(conn):
+    conn.fetchall_return_value = (
+        ('log_destination', 'stderr'),
+        ('logging_collector', 'on')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert should_collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_destination', 'stderr'),
+        ('logging_collector', 'off')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert not should_collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_destination', 'csvlog'),
+        ('logging_collector', 'on')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert should_collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_destination', 'csvlog'),
+        ('logging_collector', 'off')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert not should_collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_destination', 'csvlog,stderr'),
+        ('logging_collector', 'on')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert should_collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_destination', 'csvlog,stderr'),
+        ('logging_collector', 'off')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert not should_collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_destination', 'syslog'),
+        ('logging_collector', 'on')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert not should_collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_destination', 'syslog'),
+        ('logging_collector', 'off')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert not should_collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_destination', 'syslog,stderr'),
+        ('logging_collector', 'on')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert should_collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_destination', 'syslog,stderr'),
+        ('logging_collector', 'off')
+    )
+    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert not should_collect_logs
