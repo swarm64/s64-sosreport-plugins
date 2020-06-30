@@ -1,8 +1,12 @@
 
+import subprocess
+
 from contextlib import contextmanager
 
 import pytest
+
 from psycopg2 import DatabaseError
+from testfixtures.popen import MockPopen, PopenBehaviour
 
 from plugins.postgresql_alt import PostgreSQLAlt
 
@@ -16,6 +20,12 @@ TEST_CONFIG = [
 
 TEST_CONFIG_STR = "foo = 1\nbar = 2\nfoobar = ''"
 
+DOCKER_OUTPUT = '\n'.join([
+    '/var/lib/postgresql/data /var/lib/docker/volumes/8abf2b00c0f5183343805341d6e27d8c3e4155b2316e1a4925177e2c54e12efc/_data',
+    '/sys/class/fpga/intel-fpga-dev.0/intel-fpga-port.0 /sys/class/fpga/intel-fpga-dev.0/intel-fpga-port.0',
+    '/data /mnt/storage/the_land_where_the_data_lives',
+    '/init.sh /root/mitch/s64da-compose/init.sh'
+])
 
 @pytest.fixture
 def conn(mocker):
@@ -68,81 +78,130 @@ def test_config_to_string():
 
 def test_get_should_collect_logs(conn):
     conn.fetchall_return_value = (
+        ('log_directory', 'foobar'),
         ('log_destination', 'stderr'),
+        ('data_directory', 'fancy'),
         ('logging_collector', 'on')
     )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
     assert err is None
-    assert should_collect_logs
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert logging_info.collect_logs
 
     conn.fetchall_return_value = (
+        ('log_directory', 'foobar'),
+        ('data_directory', 'fancy'),
         ('log_destination', 'stderr'),
         ('logging_collector', 'off')
     )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
     assert err is None
-    assert not should_collect_logs
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert not logging_info.collect_logs
+
+    conn.fetchall_return_value = (
+        ('log_directory', 'foobar'),
+        ('log_destination', 'csvlog'),
+        ('data_directory', 'fancy'),
+        ('logging_collector', 'on')
+    )
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    assert err is None
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert logging_info.collect_logs
 
     conn.fetchall_return_value = (
         ('log_destination', 'csvlog'),
-        ('logging_collector', 'on')
+        ('log_directory', 'foobar'),
+        ('logging_collector', 'off'),
+        ('data_directory', 'fancy')
     )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
     assert err is None
-    assert should_collect_logs
-
-    conn.fetchall_return_value = (
-        ('log_destination', 'csvlog'),
-        ('logging_collector', 'off')
-    )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
-    assert err is None
-    assert not should_collect_logs
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert not logging_info.collect_logs
 
     conn.fetchall_return_value = (
         ('log_destination', 'csvlog,stderr'),
+        ('data_directory', 'fancy'),
+        ('log_directory', 'foobar'),
         ('logging_collector', 'on')
     )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
     assert err is None
-    assert should_collect_logs
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert logging_info.collect_logs
 
     conn.fetchall_return_value = (
         ('log_destination', 'csvlog,stderr'),
-        ('logging_collector', 'off')
+        ('logging_collector', 'off'),
+        ('data_directory', 'fancy'),
+        ('log_directory', 'foobar')
     )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
     assert err is None
-    assert not should_collect_logs
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert not logging_info.collect_logs
 
     conn.fetchall_return_value = (
         ('log_destination', 'syslog'),
-        ('logging_collector', 'on')
+        ('data_directory', 'fancy'),
+        ('logging_collector', 'on'),
+        ('log_directory', 'foobar')
     )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
     assert err is None
-    assert not should_collect_logs
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert not logging_info.collect_logs
 
     conn.fetchall_return_value = (
+        ('log_directory', 'foobar'),
         ('log_destination', 'syslog'),
+        ('data_directory', 'fancy'),
         ('logging_collector', 'off')
     )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
     assert err is None
-    assert not should_collect_logs
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert not logging_info.collect_logs
 
     conn.fetchall_return_value = (
+        ('data_directory', 'fancy'),
         ('log_destination', 'syslog,stderr'),
+        ('log_directory', 'foobar'),
         ('logging_collector', 'on')
     )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
     assert err is None
-    assert should_collect_logs
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert logging_info.collect_logs
 
     conn.fetchall_return_value = (
         ('log_destination', 'syslog,stderr'),
+        ('log_directory', 'foobar'),
+        ('data_directory', 'fancy'),
         ('logging_collector', 'off')
     )
-    should_collect_logs, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
     assert err is None
-    assert not should_collect_logs
+    assert logging_info.log_dir == 'foobar'
+    assert logging_info.data_dir == 'fancy'
+    assert not logging_info.collect_logs
+
+def test_docker_get_data_dir_host(mocker):
+    popen_mock = MockPopen()
+    popen_mock.set_default(stdout=DOCKER_OUTPUT.encode('utf-8'))
+    mocker.patch('subprocess.Popen', new=popen_mock)
+
+    data_dir_host, err = PostgreSQLAlt.docker_get_data_dir_host('foobar', '/data')
+    assert err is None
+    assert data_dir_host == '/mnt/storage/the_land_where_the_data_lives'

@@ -1,11 +1,23 @@
 # -*- coding: utf8 -*-
 
+import os
+
+from shlex import split as shlex_split
 from sos.report.plugins import Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin
+from subprocess import check_output, CalledProcessError
 from typing import List, Optional, Tuple
 
 import psycopg2
 
 DEFAULT_DSN = 'postgresql://postgres@localhost/postgres'
+
+
+class LoggingInfo:
+    def __init__(self, collect_logs, log_dir, data_dir):
+        self.collect_logs = collect_logs
+        self.log_dir = log_dir
+        self.data_dir = data_dir
+
 
 class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
     """PostgreSQL alternative collection plugin"""
@@ -14,7 +26,8 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
     short_desc = 'PostgreSQL alternative collection plugin'
 
     option_list = [
-        ('dsn', 'The PostgreSQL DSN to collect information from.', '', DEFAULT_DSN)
+        ('dsn', 'The PostgreSQL DSN to collect information from.', '', DEFAULT_DSN),
+        ('container_id', 'The docker container id where PostgreSQL runs in.', '', '')
     ]
 
     @classmethod
@@ -45,32 +58,57 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
         return '\n'.join([f'{key} = {normalize_string(value)}' for key, value in config])
 
     @classmethod
-    def get_should_collect_logs(cls, conn: object) -> Tuple[bool, Optional[Exception]]:
+    def get_should_collect_logs(cls, conn: object) -> Tuple[LoggingInfo, Optional[Exception]]:
+        logging_info = LoggingInfo(False, '', '')
         try:
             with conn.cursor() as cur:
                 cur.execute('''
                     SELECT name, setting
                     FROM pg_settings
                     WHERE name IN (
-                      'log_destination',
-                      'logging_collector'
-                    )
-                   ''')
+                        'log_destination',
+                      , 'logging_collector'
+                      , 'log_directory'
+                      , 'data_directory'
+                    )''')
                 logging_config = cur.fetchall()
                 logging_config = {key:value for key, value in logging_config}
 
                 log_destinations = logging_config['log_destination'].split(',')
                 logging_collector = logging_config['logging_collector']
+
+                logging_info.log_dir = logging_config['log_directory']
+                logging_info.data_dir = logging_config['data_directory']
         except psycopg2.Error as err:
-            return (False, err)
+            return (logging_info, err)
 
         except KeyError as err:
-            return (False, err)
+            return (logging_info, err)
 
         if any(item in ['stderr', 'csvlog'] for item in log_destinations):
-            return (logging_collector == 'on', None)
+            if logging_collector == 'on':
+                logging_info.collect_logs = True
 
-        return (False, None)
+        return (logging_info, None)
+
+    @classmethod
+    def docker_get_data_dir_host(cls, container_id: str, pg_data_dir: str) -> Tuple[str, Optional[Exception]]:
+        inspect_cmd  = "docker inspect "
+        inspect_cmd += "-f '{{range .Mounts }}{{println .Destination .Source}}{{ end }}' "
+        inspect_cmd += container_id
+
+        try:
+            docker_mounts = check_output(shlex_split(inspect_cmd), universal_newlines=True)
+            docker_mounts = docker_mounts.split('\n')
+            data_dir = [mount.split(' ')[1] for mount in docker_mounts if pg_data_dir in mount][1]
+
+        except CalledProcessError as err:
+            return ('', err)
+
+        except IndexError as err:
+            return ('', err)
+
+        return (data_dir, None)
 
     def write_output(self, output):
         self.add_string_as_file(output, 'postgresql.conf')
@@ -90,5 +128,13 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
         config_str = PostgreSQLAlt.config_to_string(config)
         self.write_output(config_str)
 
-        if PostgreSQLAlt.get_should_collect_logs(conn):
-            pass
+        logging_info, error = PostgreSQLAlt.get_should_collect_logs(conn)
+        if error:
+            self.write_output(f'Could not get log collection info: {error}')
+            return
+
+        container_id = self.get_option('container_id')
+        if logging_info.collect_logs and container_id:
+            data_dir_host = PostgreSQLAlt.docker_get_data_dir_host(container_id, logging_info.data_dir)
+            log_dir_host = os.path.join(data_dir_host, logging_info.log_dir, '*')
+            self.add_copy_spec(log_dir_host)
