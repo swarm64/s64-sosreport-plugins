@@ -5,7 +5,7 @@ import os
 from shlex import split as shlex_split
 from sos.report.plugins import Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin
 from subprocess import check_output, CalledProcessError
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import psycopg2
 
@@ -40,15 +40,18 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
         return (conn, None)
 
     @classmethod
-    def get_config(cls, conn: object) -> Tuple[List[Tuple[str, str]], Optional[Exception]]:
+    def _do_query(cls, conn: object, sql: str) -> Tuple[str, Optional[Exception]]:
         try:
             with conn.cursor() as cur:
-                cur.execute('SELECT name, setting FROM pg_settings ORDER BY name ASC')
-                config = cur.fetchall()
+                cur.execute(sql)
+                return (cur.fetchall(), None)
         except psycopg2.Error as err:
             return (None, err)
 
-        return (config, None)
+    @classmethod
+    def get_config(cls, conn: object) -> Tuple[List, Optional[Exception]]:
+        sql = 'SELECT name, setting FROM pg_settings ORDER BY name ASC'
+        return cls._do_query(conn, sql)
 
     @classmethod
     def config_to_string(cls, config: List[Tuple[str, str]]) -> str:
@@ -110,6 +113,24 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
 
         return (data_dir, None)
 
+    @classmethod
+    def get_s64_license(cls, conn: object) -> Tuple[Dict, str]:
+        sql = 'SELECT * FROM swarm64da.show_license()'
+        license_info, err = cls._do_query(conn, sql)
+        if err:
+            return (None, err)
+
+        if not license_info:
+            return ({}, err)
+
+        license_info = license_info[0]
+        return ({
+            'type': license_info[0],
+            'start': license_info[1],
+            'expiry': license_info[2],
+            'customer': license_info[3]
+        }, err)
+
     def write_output(self, output):
         self.add_string_as_file(output, 'postgresql.conf')
 
@@ -138,3 +159,7 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
             data_dir_host = PostgreSQLAlt.docker_get_data_dir_host(container_id, logging_info.data_dir)
             log_dir_host = os.path.join(data_dir_host, logging_info.log_dir, '*')
             self.add_copy_spec(log_dir_host)
+        license_info, error = PostgreSQLAlt.get_s64_license(conn)
+        if error:
+            self.write_output(f'Could not get Swarm64 license: {error}')
+        self.write_output(f'Swarm64 license info: {str(license_info)}')

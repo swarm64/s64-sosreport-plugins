@@ -205,3 +205,22 @@ def test_docker_get_data_dir_host(mocker):
     data_dir_host, err = PostgreSQLAlt.docker_get_data_dir_host('foobar', '/data')
     assert err is None
     assert data_dir_host == '/mnt/storage/the_land_where_the_data_lives'
+
+def test_get_s64_license(conn):
+    conn.fetchall_return_value = (
+        ('full', '2020-01-01', '2030-01-01', 's64-license-test'),
+    )
+
+    license_info, err = PostgreSQLAlt.get_s64_license(conn)
+    assert err is None
+    assert license_info == {
+        'type': 'full',
+        'start': '2020-01-01',
+        'expiry': '2030-01-01',
+        'customer': 's64-license-test'
+    }
+
+    conn.fetchall_return_value = ()
+    license_info, err = PostgreSQLAlt.get_s64_license(conn)
+    assert err is None
+    assert not license_info
