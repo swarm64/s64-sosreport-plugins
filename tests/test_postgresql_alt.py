@@ -76,14 +76,14 @@ def test_config_to_string():
     config_str = PostgreSQLAlt.config_to_string(TEST_CONFIG)
     assert config_str == TEST_CONFIG_STR
 
-def test_get_should_collect_logs(conn):
+def test_get_logging_info(conn):
     conn.fetchall_return_value = (
         ('log_directory', 'foobar'),
         ('log_destination', 'stderr'),
         ('data_directory', 'fancy'),
         ('logging_collector', 'on')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'
@@ -95,7 +95,7 @@ def test_get_should_collect_logs(conn):
         ('log_destination', 'stderr'),
         ('logging_collector', 'off')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'
@@ -107,7 +107,7 @@ def test_get_should_collect_logs(conn):
         ('data_directory', 'fancy'),
         ('logging_collector', 'on')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'
@@ -119,7 +119,7 @@ def test_get_should_collect_logs(conn):
         ('logging_collector', 'off'),
         ('data_directory', 'fancy')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'
@@ -131,7 +131,7 @@ def test_get_should_collect_logs(conn):
         ('log_directory', 'foobar'),
         ('logging_collector', 'on')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'
@@ -143,7 +143,7 @@ def test_get_should_collect_logs(conn):
         ('data_directory', 'fancy'),
         ('log_directory', 'foobar')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'
@@ -155,7 +155,7 @@ def test_get_should_collect_logs(conn):
         ('logging_collector', 'on'),
         ('log_directory', 'foobar')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'
@@ -167,7 +167,7 @@ def test_get_should_collect_logs(conn):
         ('data_directory', 'fancy'),
         ('logging_collector', 'off')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'
@@ -179,7 +179,7 @@ def test_get_should_collect_logs(conn):
         ('log_directory', 'foobar'),
         ('logging_collector', 'on')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'
@@ -191,7 +191,7 @@ def test_get_should_collect_logs(conn):
         ('data_directory', 'fancy'),
         ('logging_collector', 'off')
     )
-    logging_info, err = PostgreSQLAlt.get_should_collect_logs(conn)
+    logging_info, err = PostgreSQLAlt.get_logging_info(conn)
     assert err is None
     assert logging_info.log_dir == 'foobar'
     assert logging_info.data_dir == 'fancy'

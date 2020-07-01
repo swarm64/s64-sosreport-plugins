@@ -58,7 +58,7 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
         return '\n'.join([f'{key} = {normalize_string(value)}' for key, value in config])
 
     @classmethod
-    def get_should_collect_logs(cls, conn: object) -> Tuple[LoggingInfo, Optional[Exception]]:
+    def get_logging_info(cls, conn: object) -> Tuple[LoggingInfo, Optional[Exception]]:
         logging_info = LoggingInfo(False, '', '')
         try:
             with conn.cursor() as cur:
@@ -66,7 +66,7 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
                     SELECT name, setting
                     FROM pg_settings
                     WHERE name IN (
-                        'log_destination',
+                        'log_destination'
                       , 'logging_collector'
                       , 'log_directory'
                       , 'data_directory'
@@ -93,8 +93,8 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
 
     @classmethod
     def docker_get_data_dir_host(cls, container_id: str, pg_data_dir: str) -> Tuple[str, Optional[Exception]]:
-        inspect_cmd  = "docker inspect "
-        inspect_cmd += "-f '{{range .Mounts }}{{println .Destination .Source}}{{ end }}' "
+        inspect_cmd  = "docker inspect -f "
+        inspect_cmd += "'{{ range .Mounts }}{{ println .Destination .Source }}{{ end }}' "
         inspect_cmd += container_id
 
         try:
@@ -128,7 +128,7 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
         config_str = PostgreSQLAlt.config_to_string(config)
         self.write_output(config_str)
 
-        logging_info, error = PostgreSQLAlt.get_should_collect_logs(conn)
+        logging_info, error = PostgreSQLAlt.get_logging_info(conn)
         if error:
             self.write_output(f'Could not get log collection info: {error}')
             return
