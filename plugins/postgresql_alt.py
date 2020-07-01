@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 
 from sos.report.plugins import Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import psycopg2
 
@@ -27,15 +27,18 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
         return (conn, None)
 
     @classmethod
-    def get_config(cls, conn: object) -> List[Tuple[str, str]]:
+    def _do_query(cls, conn: object, sql: str) -> Tuple[str, str]:
         try:
             with conn.cursor() as cur:
-                cur.execute('SELECT name, setting FROM pg_settings ORDER BY name ASC')
-                config = cur.fetchall()
+                cur.execute(sql)
+                return (cur.fetchall(), None)
         except psycopg2.Error as err:
             return (None, err)
 
-        return (config, None)
+    @classmethod
+    def get_config(cls, conn: object) -> List[Tuple[str, str]]:
+        sql = 'SELECT name, setting FROM pg_settings ORDER BY name ASC'
+        return cls._do_query(conn, sql)
 
     @classmethod
     def config_to_string(cls, config: List[Tuple[str, str]]) -> str:
@@ -43,6 +46,24 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
             return s if s else "''"
 
         return '\n'.join([f'{key} = {normalize_string(value)}' for key, value in config])
+
+    @classmethod
+    def get_s64_license(cls, conn: object) -> Tuple[Dict, str]:
+        sql = 'SELECT * FROM swarm64da.show_license()'
+        license_info, err = cls._do_query(conn, sql)
+        if err:
+            return (None, err)
+
+        if not license_info:
+            return ({}, err)
+
+        license_info = license_info[0]
+        return ({
+            'type': license_info[0],
+            'start': license_info[1],
+            'expiry': license_info[2],
+            'customer': license_info[3]
+        }, err)
 
     def write_output(self, output):
         self.add_string_as_file(output, 'postgresql.conf')
@@ -61,3 +82,8 @@ class PostgreSQLAlt(Plugin, RedHatPlugin, DebianPlugin, UbuntuPlugin):
 
         config_str = PostgreSQLAlt.config_to_string(config)
         self.write_output(config_str)
+
+        license_info, error = PostgreSQLAlt.get_s64_license(conn)
+        if error:
+            self.write_output(f'Could not get Swarm64 license: {error}')
+        self.write_output(f'Swarm64 license info: {str(license_info)}')

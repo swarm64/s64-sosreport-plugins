@@ -65,3 +65,22 @@ def test_get_config_err(mocker, conn):
 def test_config_to_string():
     config_str = PostgreSQLAlt.config_to_string(TEST_CONFIG)
     assert config_str == TEST_CONFIG_STR
+
+def test_get_s64_license(conn):
+    conn.fetchall_return_value = (
+        ('full', '2020-01-01', '2030-01-01', 's64-license-test'),
+    )
+
+    license_info, err = PostgreSQLAlt.get_s64_license(conn)
+    assert err is None
+    assert license_info == {
+        'type': 'full',
+        'start': '2020-01-01',
+        'expiry': '2030-01-01',
+        'customer': 's64-license-test'
+    }
+
+    conn.fetchall_return_value = ()
+    license_info, err = PostgreSQLAlt.get_s64_license(conn)
+    assert err is None
+    assert not license_info
